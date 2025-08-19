@@ -409,22 +409,12 @@ function SignupScreen({ onSignup, onBack }) {
   );
 }
 
-function HomeScreen({
-  query,
-  onQuery,
-  categories,
-  cat,
-  onCat,
-  products,
-  onAdd,
-}) {
+function HomeScreen({ query, onQuery, categories, cat, onCat, products, onAdd }) {
   // Filtra produtos por categoria e busca
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      const matchesCat = !cat || p.category_id === cat; // ajuste 'category_id' para o nome correto no seu DB
-      const matchesQuery =
-        !query ||
-        p.name.toLowerCase().includes(query.toLowerCase());
+      const matchesCat = !cat || String(p.cat) === String(cat); // 'cat' da tabela products
+      const matchesQuery = !query || p.name.toLowerCase().includes(query.toLowerCase());
       return matchesCat && matchesQuery;
     });
   }, [products, cat, query]);
@@ -433,16 +423,14 @@ function HomeScreen({
     <FlatList
       style={{ flex: 1 }}
       contentContainerStyle={{ paddingBottom: 100 }}
-      data={filteredProducts} // <-- usa os produtos filtrados
-      keyExtractor={(item) => item.id}
+      data={filteredProducts}
+      keyExtractor={(item) => String(item.id)}
       ListHeaderComponent={
         <>
           <View style={styles.banner}>
             <View style={{ flex: 1 }}>
               <Text style={styles.bannerTitle}>Bem-vindo à Turbo Drink</Text>
-              <Text style={styles.bannerSub}>
-                Entrega rápida para matar sua sede
-              </Text>
+              <Text style={styles.bannerSub}>Entrega rápida para matar sua sede</Text>
             </View>
             <BrandMark size={72} />
           </View>
@@ -459,28 +447,20 @@ function HomeScreen({
             horizontal
             showsHorizontalScrollIndicator={false}
             style={{ marginTop: 8 }}
-            contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-            <Chip label={'Tudo'} active={!cat} onPress={() => onCat('')} />
+            contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+          >
+            <Chip label={'Tudo'} active={!cat} onPress={() => onCat(null)} />
             {categories.map((c) => (
-              <Chip
-                key={c.id}
-                label={c.name}
-                active={cat === c.id}
-                onPress={() => onCat(c.id)}
-              />
+              <Chip key={c.id} label={c.name} active={String(cat) === String(c.id)} onPress={() => onCat(c.id)} />
             ))}
           </ScrollView>
 
           <Text style={styles.sectionTitle}>Itens populares</Text>
         </>
       }
-      renderItem={({ item }) => (
-        <ProductCard item={item} onAdd={() => onAdd(item)} />
-      )}
+      renderItem={({ item }) => <ProductCard item={item} onAdd={() => onAdd(item)} />}
       ListEmptyComponent={
-        <Text style={{ color: COLORS.muted, padding: 16 }}>
-          Nenhum item encontrado.
-        </Text>
+        <Text style={{ color: COLORS.muted, padding: 16 }}>Nenhum item encontrado.</Text>
       }
     />
   );

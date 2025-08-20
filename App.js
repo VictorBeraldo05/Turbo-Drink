@@ -438,7 +438,7 @@ function LoginScreen({ onSignupNavigate, onLoginSuccess }) {
     <View style={{ backgroundColor: COLORS.bg, flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 20 }}>
       <BrandMark size={300} />
       <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-      <TextInput placeholder="Senha" value={senha} onChangeText={setSenha} secureTextEntry style={styles.inputCampos} />
+      <TextInput placeholder="Senha" value={senha} onChangeText={setSenha} secureTextEntry style={styles.input} />
 
       <Pressable onPress={handleLogin} style={styles.primaryBtn}>
         <Text style={styles.primaryTxt}>Entrar</Text>
@@ -474,30 +474,17 @@ function AdditionalInfoForm({ user, onComplete }) {
       return;
     }
 
-  const { data: existingCpf, error: cpfError } = await supabase
+  const { data: existing, error: checkError } = await supabase
     .from('usuarios')
     .select('id')
     .eq('cpf', cpf)
     .single();
-  
-  if (existingCpf) {
-    setAlertMessage("CPF já cadastrado. Verifique seus dados.");
-    setAlertVisible(true);
-    return;
-  }
-  
-  // Verifica se já existe Telefone
-  const { data: existingPhone, error: phoneError } = await supabase
-    .from('usuarios')
-    .select('id')
-    .eq('telefone', telefone)
-    .single();
-  
-  if (existingPhone) {
-    setAlertMessage("Telefone já cadastrado. Verifique seus dados.");
-    setAlertVisible(true);
-    return;
-  }
+
+    if (existing) {
+      setAlertMessage("CPF já cadastrado. Verifique seus dados.");
+      setAlertVisible(true);
+      return;
+    }
   
     const { data, error } = await supabase
       .from('usuarios')
@@ -524,7 +511,7 @@ function AdditionalInfoForm({ user, onComplete }) {
       <Text style={{color: 'white', fontSize: 25, textAlign: 'center'}}>Preencha as informações</Text>
       <Text style={{color: 'white', fontSize: 25, textAlign: 'center', marginTop: 20, marginBottom: 65}}>Para completar seu cadastro</Text>
       <TextInput placeholder="CPF" value={cpf} onChangeText={setCpf} style={styles.input} />
-      <TextInput placeholder="Telefone" value={telefone} onChangeText={setTelefone} style={styles.inputCampos} />
+      <TextInput placeholder="Telefone" value={telefone} onChangeText={setTelefone} style={styles.input} />
       <Pressable onPress={handleSubmit} style={styles.primaryBtn}>
         <Text style={styles.primaryTxt}>Continuar</Text>
       </Pressable>
@@ -1051,10 +1038,10 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     borderWidth: 5,
     borderColor: COLORS.line,
-    marginTop: 60, marginBottom: 15,
+    marginTop: 15, marginBottom: 15,
   },
 
-  inputCampos: {
+  inputSenha: {
     backgroundColor: '#0b0b0d',
     borderRadius: 14,
     width: 350,

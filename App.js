@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { GoogleLoginButton } from "react-social-login-buttons";
 import { useEffect } from 'react';
 import { supabase } from './supabase';
 import {
@@ -14,6 +15,7 @@ import {
   FlatList,
   Modal,
   Alert,
+  Linking
 } from 'react-native';
 
 // Como não estamos mais no Snack, vamos usar uma imagem local
@@ -51,6 +53,60 @@ function BrandMark({ size = 40 }) {
       source={require("./assets/TurboDrink.png")}
       style={{ width: size, height: size, resizeMode: 'cover', borderRadius: 40}}
     />
+  );
+}
+
+function AlertPopup({ visible, message, onClose, type = 'info' }) {
+  // Ajuste de cores baseado no tipo de alerta
+  const backgroundColors = {
+    info: COLORS.bgLight || '#333',      // alerta informativo
+    success: COLORS.success || '#4CAF50', // sucesso
+    error: COLORS.error || '#F44336'     // erro
+  };
+
+  const textColors = {
+    info: COLORS.text || '#FFF',
+    success: '#FFF',
+    error: '#FFF'
+  };
+
+  return (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <View style={{
+        flex:1,
+        backgroundColor:'rgba(0,0,0,0.5)',
+        justifyContent:'center',
+        alignItems:'center'
+      }}>
+        <View style={{
+          width: 300,
+          backgroundColor: backgroundColors[type],
+          borderRadius: 15,
+          padding: 25,
+          alignItems: 'center',
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 4,
+          elevation: 5
+        }}>
+          <Text style={{ fontSize:16, marginBottom:20, textAlign:'center', color: textColors[type] }}>
+            {message}
+          </Text>
+          <Pressable 
+            onPress={onClose} 
+            style={{ paddingVertical:10, paddingHorizontal:20, borderRadius:10, backgroundColor: 'rgba(255,255,255,0.2)' }}
+          >
+            <Text style={{ color: textColors[type], fontWeight:'bold' }}>OK</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -96,7 +152,7 @@ export default function App() {
   // Derived
 
   const cartDetailed = cart.map((ci) => ({
-    ...PRODUCTS.find((p) => p.id === ci.id),
+    ...products.find((p) => p.id === ci.id),
     qty: ci.qty,
   }));
   const subtotal = cartDetailed.reduce((s, it) => s + it.price * it.qty, 0);
@@ -170,7 +226,7 @@ export default function App() {
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <StatusBar barStyle="light-content" />
       {!user && screen === SCREENS.LOGIN && (
-        <LoginScreen onLogin={handleLogin} 
+        <LoginScreen onLoginSuccess={handleLogin} 
         onSignupNavigate={() => setScreen(SCREENS.SIGNUP)}/>
       )}
     {!user && screen === SCREENS.SIGNUP && (
@@ -306,105 +362,223 @@ function TabBar({ current, onChange }) {
   );
 }
 
-function LoginScreen({ onLogin, onSignupNavigate }) {
+function LoginScreen({ onSignupNavigate, onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [showAdditionalForm, setShowAdditionalForm] = useState(false);
+  const [googleUser, setGoogleUser] = useState(null);
+
+  // --- Deep Link listener ---
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        const user = session.user;
+  
+        // Verifica se o usuário existe na tabela
+        const { data: usuarioData } = await supabase
+          .from('usuarios')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+  
+        if (!usuarioData) {
+          setGoogleUser(user);
+          setShowAdditionalForm(true);
+        } else {
+          onLoginSuccess(user);
+        }
+      }
+    });
+  
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  async function handleLogin() {
+    if (!email || !senha) {
+      setAlertMessage("Preencha todos os campos");
+      setAlertVisible(true);
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+    if (error) {
+      setAlertMessage(error.message);
+      setAlertVisible(true);
+      return;
+    }
+
+    // login normal
+    onLoginSuccess(data.user);
+  }
+
+  async function handleGoogleLogin() {
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'turbodrink://callback', // deep link do seu app
+        }
+      });
+      // O redirecionamento para o app vai disparar o listener acima
+    } catch (err) {
+      setAlertMessage("Erro ao iniciar login com Google");
+      setAlertVisible(true);
+    }
+  }
+
+  if (showAdditionalForm && googleUser) {
+    return <AdditionalInfoForm user={googleUser} onComplete={() => onLoginSuccess(googleUser)} />;
+  }
+
   return (
-    <View
-      style={{
-        backgroundColor: COLORS.bg,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingTop: 20
-      }}>
+    <View style={{ backgroundColor: COLORS.bg, flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 20 }}>
       <BrandMark size={300} />
-      <Text style={{ color: COLORS.muted, marginTop: 30, fontSize:20 }}>
-        Entre para continuar
-      </Text>
-      <TextInput
-        value={email}
-        onChangeText={setEmail}
-        placeholder="Seu e-mail"
-        placeholderTextColor={COLORS.muted}
-        style={styles.input}
+      <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+      <TextInput placeholder="Senha" value={senha} onChangeText={setSenha} secureTextEntry style={styles.input} />
+
+      <Pressable onPress={handleLogin} style={styles.primaryBtn}>
+        <Text style={styles.primaryTxt}>Entrar</Text>
+      </Pressable>
+
+      <GoogleLoginButton
+        onClick={handleGoogleLogin}
+        style={styles.btn_Logins}
       />
-      <TextInput
-        value={senha}
-        onChangeText={setSenha}
-        placeholder="Sua senha"
-        placeholderTextColor={COLORS.muted}
-        style={styles.inputSenha}
-      />
-      <Pressable
-        onPress={() => onLogin(email)}
-        style={[styles.primaryBtn, {}]}>
-        <Text style={styles.primaryTxt}>Continuar com e-mail</Text>
-      </Pressable>
-      <Pressable
-        onPress={() => onLogin('google@account')}
-        style={[styles.primaryBtn, { marginTop: 12 }]}>
-        <Text style={styles.primaryTxt}>Continuar com Google (demo)</Text>
-      </Pressable>
-      <Pressable
-        onPress = {onSignupNavigate}>
-        <Text style={{fontSize: 15, color: 'white', marginTop: 15}}>Não tem Cadastro ? Clique aqui</Text>
-      </Pressable>
+
+      <AlertPopup visible={alertVisible} message={alertMessage} onClose={() => setAlertVisible(false)} />
     </View>
   );
 }
 
-function SignupScreen({ onSignup, onBack }) {
+// ---- AdditionalInfoForm ----
+function AdditionalInfoForm({ user, onComplete }) {
+  const [cpf, setCpf] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+
+  async function handleSubmit() {
+    if (!cpf || !telefone) {
+      setAlertMessage("Preencha todos os campos");
+      setAlertVisible(true);
+      return;
+    }
+
+  const { data: existing, error: checkError } = await supabase
+    .from('usuarios')
+    .select('id')
+    .eq('cpf', cpf)
+    .single();
+
+    if (existing) {
+      setAlertMessage("CPF já cadastrado. Verifique seus dados.");
+      setAlertVisible(true);
+      return;
+    }
+  
+    const { data, error } = await supabase
+      .from('usuarios')
+      .insert([
+        { 
+          id: user.id, 
+          nome: user.user_metadata?.full_name || user.email,
+          cpf, 
+          telefone
+        }
+      ]);
+  
+    if (error) {
+      console.error('Erro ao salvar dados adicionais:', error); // 👈 log completo
+      setAlertMessage("Erro ao salvar dados. Veja o console para detalhes.");
+      setAlertVisible(true);
+    } else {
+      onComplete();
+    }
+  }
+
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
+      <Text style={{color: 'white', fontSize: 25, textAlign: 'center'}}>Preencha as informações</Text>
+      <Text style={{color: 'white', fontSize: 25, textAlign: 'center', marginTop: 20, marginBottom: 65}}>Para completar seu cadastro</Text>
+      <TextInput placeholder="CPF" value={cpf} onChangeText={setCpf} style={styles.input} />
+      <TextInput placeholder="Telefone" value={telefone} onChangeText={setTelefone} style={styles.input} />
+      <Pressable onPress={handleSubmit} style={styles.primaryBtn}>
+        <Text style={styles.primaryTxt}>Continuar</Text>
+      </Pressable>
+
+      <AlertPopup visible={alertVisible} message={alertMessage} onClose={() => setAlertVisible(false)} />
+    </View>
+  );
+}
+
+function SignupScreen({ onBack }) {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [cpf, setCpf] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [senha, setSenha] = useState('');
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+
+  async function handleSignup() {
+    if (!nome || !email || !cpf || !telefone || !senha) {
+      setAlertMessage("Por favor, preencha todos os campos para criar sua conta.");
+      setAlertVisible(true);
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signUp({ email, password: senha });
+
+    if (error) {
+      if (error.message.includes('User already registered')) {
+        setAlertMessage("Este e-mail já está cadastrado. Tente fazer login.");
+      } else {
+        setAlertMessage("Erro ao criar conta. Tente novamente mais tarde.");
+      }
+      setAlertVisible(true);
+      return;
+    }
+
+    const user = data.user;
+
+    const { error: insertError } = await supabase.from('usuarios').insert([
+      { id: user.id, nome, cpf, telefone }
+    ]);
+
+    if (insertError) {
+      setAlertMessage("Erro ao salvar dados adicionais. Tente novamente mais tarde.");
+      setAlertVisible(true);
+    } else {
+      setAlertMessage("Conta criada com sucesso! Faça login para continuar.");
+      setAlertVisible(true);
+      // volta para login após 1.5s
+      setTimeout(() => onBack(), 1500);
+    }
+  }
 
   return (
-    <View style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20, justifyContent: 'center' }}>
-      <Text style={{ fontSize: 26, color: COLORS.text, marginBottom: 20, textAlign: 'center' }}>
-        Criar conta
-      </Text>
+    <View style={{ flex:1, backgroundColor: COLORS.bg, padding: 20, justifyContent: 'center' }}>
+      <Text style={{ fontSize: 26, color: COLORS.text, marginBottom: 20, textAlign: 'center' }}>Criar conta</Text>
 
-      <TextInput
-        placeholder="Nome completo"
-        value={nome}
-        onChangeText={setNome}
-        placeholderTextColor={COLORS.muted}
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="E-mail"
-        value={email}
-        onChangeText={setEmail}
-        placeholderTextColor={COLORS.muted}
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="CPF"
-        value={cpf}
-        onChangeText={setCpf}
-        placeholderTextColor={COLORS.muted}
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Telefone"
-        value={telefone}
-        onChangeText={setTelefone}
-        placeholderTextColor={COLORS.muted}
-        style={styles.input}
-      />
+      <TextInput placeholder="Nome completo" value={nome} onChangeText={setNome} style={styles.input} />
+      <TextInput placeholder="E-mail" value={email} onChangeText={setEmail} style={styles.input} />
+      <TextInput placeholder="CPF" value={cpf} onChangeText={setCpf} style={styles.input} />
+      <TextInput placeholder="Telefone" value={telefone} onChangeText={setTelefone} style={styles.input} />
+      <TextInput placeholder="Senha" secureTextEntry value={senha} onChangeText={setSenha} style={styles.input} />
 
-      <Pressable
-        onPress={() => onSignup({ nome, email, cpf, telefone })}
-        style={[styles.primaryBtn, { marginTop: 20 }]}>
+      <Pressable onPress={handleSignup} style={[styles.primaryBtn, { marginTop: 20 }]}>
         <Text style={styles.primaryTxt}>Cadastrar</Text>
       </Pressable>
 
       <Pressable onPress={onBack} style={{ marginTop: 15 }}>
-        <Text style={{ fontSize: 15, color: COLORS.muted, textAlign: 'center' }}>
-          Já tem conta? Voltar para login
-        </Text>
+        <Text style={{ fontSize: 15, color: COLORS.muted, textAlign: 'center' }}>Já tem conta? Voltar para login</Text>
       </Pressable>
+
+      <AlertPopup visible={alertVisible} message={alertMessage} onClose={() => setAlertVisible(false)} />
     </View>
   );
 }
@@ -461,7 +635,7 @@ function HomeScreen({ query, onQuery, categories, cat, onCat, products, onAdd })
       renderItem={({ item }) => <ProductCard item={item} onAdd={() => onAdd(item)} />}
       ListEmptyComponent={
         <Text style={{ color: COLORS.muted, padding: 16 }}>Nenhum item encontrado.</Text>
-      }
+      } 
     />
   );
 }
@@ -1034,6 +1208,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  btn_Logins: {
+    width: 350,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  textWhite: { 
+    color: '#white', 
+    fontWeight: '800'
+   },
+
   primaryTxt: { color: '#000', fontWeight: '900', fontSize: 20},
   secondaryBtn: {
     backgroundColor: '#1a1a1d',

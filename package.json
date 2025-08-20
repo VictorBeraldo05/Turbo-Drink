@@ -1,11 +1,12 @@
 {
   "dependencies": {
+    "@expo/metro-runtime": "~5.0.4",
     "@supabase/supabase-js": "^2.55.0",
     "expo": "^53.0.20",
     "react": "19.0.0",
-    "react-native": "^0.80.2",
     "react-dom": "19.0.0",
+    "react-native": "^0.80.2",
     "react-native-web": "^0.20.0",
-    "@expo/metro-runtime": "~5.0.4"
+    "react-social-login-buttons": "^4.1.1"
   }
 }

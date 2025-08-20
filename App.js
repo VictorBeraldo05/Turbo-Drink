@@ -438,16 +438,22 @@ function LoginScreen({ onSignupNavigate, onLoginSuccess }) {
     <View style={{ backgroundColor: COLORS.bg, flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 20 }}>
       <BrandMark size={300} />
       <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-      <TextInput placeholder="Senha" value={senha} onChangeText={setSenha} secureTextEntry style={styles.input} />
+      <TextInput placeholder="Senha" value={senha} onChangeText={setSenha} secureTextEntry style={styles.inputCampos} />
 
       <Pressable onPress={handleLogin} style={styles.primaryBtn}>
         <Text style={styles.primaryTxt}>Entrar</Text>
       </Pressable>
 
-      <GoogleLoginButton
-        onClick={handleGoogleLogin}
-        style={styles.btn_Logins}
-      />
+      <Pressable
+        onPress={handleGoogleLogin}
+        style={styles.btnGoogleLogin}
+      >
+        <Image
+          source={require('./assets/google.png')}
+          style={{ width: 20, height: 20, marginRight: 20, }}
+        />
+        <Text style={{fontSize: 15, color: "#000", fontWeight: "500",}}>Entrar com Google</Text>
+      </Pressable>
 
       <AlertPopup visible={alertVisible} message={alertMessage} onClose={() => setAlertVisible(false)} />
     </View>
@@ -468,17 +474,30 @@ function AdditionalInfoForm({ user, onComplete }) {
       return;
     }
 
-  const { data: existing, error: checkError } = await supabase
+  const { data: existingCpf, error: cpfError } = await supabase
     .from('usuarios')
     .select('id')
     .eq('cpf', cpf)
     .single();
-
-    if (existing) {
-      setAlertMessage("CPF já cadastrado. Verifique seus dados.");
-      setAlertVisible(true);
-      return;
-    }
+  
+  if (existingCpf) {
+    setAlertMessage("CPF já cadastrado. Verifique seus dados.");
+    setAlertVisible(true);
+    return;
+  }
+  
+  // Verifica se já existe Telefone
+  const { data: existingPhone, error: phoneError } = await supabase
+    .from('usuarios')
+    .select('id')
+    .eq('telefone', telefone)
+    .single();
+  
+  if (existingPhone) {
+    setAlertMessage("Telefone já cadastrado. Verifique seus dados.");
+    setAlertVisible(true);
+    return;
+  }
   
     const { data, error } = await supabase
       .from('usuarios')
@@ -505,7 +524,7 @@ function AdditionalInfoForm({ user, onComplete }) {
       <Text style={{color: 'white', fontSize: 25, textAlign: 'center'}}>Preencha as informações</Text>
       <Text style={{color: 'white', fontSize: 25, textAlign: 'center', marginTop: 20, marginBottom: 65}}>Para completar seu cadastro</Text>
       <TextInput placeholder="CPF" value={cpf} onChangeText={setCpf} style={styles.input} />
-      <TextInput placeholder="Telefone" value={telefone} onChangeText={setTelefone} style={styles.input} />
+      <TextInput placeholder="Telefone" value={telefone} onChangeText={setTelefone} style={styles.inputCampos} />
       <Pressable onPress={handleSubmit} style={styles.primaryBtn}>
         <Text style={styles.primaryTxt}>Continuar</Text>
       </Pressable>
@@ -1032,10 +1051,10 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     borderWidth: 5,
     borderColor: COLORS.line,
-    marginTop: 15, marginBottom: 15,
+    marginTop: 60, marginBottom: 15,
   },
 
-  inputSenha: {
+  inputCampos: {
     backgroundColor: '#0b0b0d',
     borderRadius: 14,
     width: 350,
@@ -1231,6 +1250,24 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
   },
+
+  btnGoogleLogin: {
+    width: 350,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderRadius: 50,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    marginTop: 20,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+
   secondaryTxt: { color: COLORS.text, fontWeight: '800' },
   divider: { height: 1, backgroundColor: COLORS.line, marginVertical: 8 },
 });

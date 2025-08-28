@@ -421,6 +421,9 @@ function LoginScreen({ onSignupNavigate, onLoginSuccess }) {
         provider: 'google',
         options: {
           redirectTo: 'turbodrink://callback', // deep link do seu app
+          queryParams: {
+            prompt: 'select_account'  // força o Google a mostrar a tela de contas
+          }
         }
       });
       // O redirecionamento para o app vai disparar o listener acima
@@ -453,6 +456,12 @@ function LoginScreen({ onSignupNavigate, onLoginSuccess }) {
           style={{ width: 20, height: 20, marginRight: 20, }}
         />
         <Text style={{fontSize: 15, color: "#000", fontWeight: "500",}}>Entrar com Google</Text>
+      </Pressable>
+
+      <Pressable onPress={onSignupNavigate} style={{ marginTop: 15 }}>
+        <Text style={{ fontSize: 15, color: COLORS.muted, textAlign: 'center' }}>
+          Não tem conta? Cadastre-se
+        </Text>
       </Pressable>
 
       <AlertPopup visible={alertVisible} message={alertMessage} onClose={() => setAlertVisible(false)} />
@@ -529,40 +538,81 @@ function SignupScreen({ onBack }) {
   const [senha, setSenha] = useState('');
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
+  const [senhaError, setSenhaError] = useState('');
 
   async function handleSignup() {
-    if (!nome || !email || !cpf || !telefone || !senha) {
-      setAlertMessage("Por favor, preencha todos os campos para criar sua conta.");
-      setAlertVisible(true);
-      return;
-    }
-
-    const { data, error } = await supabase.auth.signUp({ email, password: senha });
-
-    if (error) {
-      if (error.message.includes('User already registered')) {
-        setAlertMessage("Este e-mail já está cadastrado. Tente fazer login.");
-      } else {
-        setAlertMessage("Erro ao criar conta. Tente novamente mais tarde.");
+    try {
+      if (!nome || !email || !cpf || !telefone || !senha) {
+        setAlertMessage("Por favor, preencha todos os campos para criar sua conta.");
+        setAlertVisible(true);
+        return;
       }
-      setAlertVisible(true);
-      return;
-    }
-
-    const user = data.user;
-
-    const { error: insertError } = await supabase.from('usuarios').insert([
-      { id: user.id, nome, cpf, telefone }
-    ]);
-
-    if (insertError) {
-      setAlertMessage("Erro ao salvar dados adicionais. Tente novamente mais tarde.");
-      setAlertVisible(true);
-    } else {
+  
+      if (senha.length < 8) {
+        setAlertMessage("A senha deve ter no mínimo 8 caracteres");
+        setAlertVisible(true);
+        return;
+      }
+  
+      console.log("Verificando CPF...");
+      const { data: existingCPF, error: cpfError } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('cpf', cpf)
+        .maybeSingle();
+      console.log("CPF check:", existingCPF, cpfError);
+  
+      if (cpfError) throw cpfError;
+      if (existingCPF) {
+        setAlertMessage("CPF já cadastrado. Verifique seus dados.");
+        setAlertVisible(true);
+        return;
+      }
+  
+      console.log("Verificando telefone...");
+      const { data: existingPhone, error: phoneError } = await supabase
+        .from('usuarios')
+        .select('id')
+        .eq('telefone', telefone)
+        .maybeSingle();
+      console.log("Phone check:", existingPhone, phoneError);
+  
+      if (phoneError) throw phoneError;
+      if (existingPhone) {
+        setAlertMessage("Telefone já cadastrado. Verifique seus dados.");
+        setAlertVisible(true);
+        return;
+      }
+  
+      console.log("Criando usuário no Auth...");
+      const { data, error } = await supabase.auth.signUp({ email, password: senha });
+      console.log("Auth result:", data, error);
+  
+      if (error) {
+        setAlertMessage(error.message.includes('User already registered') 
+          ? "Este e-mail já está cadastrado. Tente fazer login." 
+          : "Erro ao criar conta. Tente novamente mais tarde.");
+        setAlertVisible(true);
+        return;
+      }
+  
+      console.log("Inserindo usuário na tabela...");
+      const user = data.user;
+      const { error: insertError } = await supabase.from('usuarios').insert([
+        { id: user.id, nome, cpf, telefone }
+      ]);
+      console.log("Insert result:", insertError);
+  
+      if (insertError) throw insertError;
+  
       setAlertMessage("Conta criada com sucesso! Faça login para continuar.");
       setAlertVisible(true);
-      // volta para login após 1.5s
       setTimeout(() => onBack(), 1500);
+  
+    } catch (err) {
+      console.error("Erro inesperado no handleSignup:", err);
+      setAlertMessage("Ocorreu um erro. Tente novamente mais tarde.");
+      setAlertVisible(true);
     }
   }
 
@@ -574,7 +624,20 @@ function SignupScreen({ onBack }) {
       <TextInput placeholder="E-mail" value={email} onChangeText={setEmail} style={styles.input} />
       <TextInput placeholder="CPF" value={cpf} onChangeText={setCpf} style={styles.input} />
       <TextInput placeholder="Telefone" value={telefone} onChangeText={setTelefone} style={styles.input} />
-      <TextInput placeholder="Senha" secureTextEntry value={senha} onChangeText={setSenha} style={styles.input} />
+      <TextInput placeholder="Senha" secureTextEntry value={senha} onChangeText={(txt) => {setSenha(txt);
+        if (txt.length < 8) {
+          setSenhaError("A senha deve ter no mínimo 8 caracteres");
+        } else {
+          setSenhaError("");
+        }
+      }}style={styles.input}/>
+
+      {/* Mensagem de erro em vermelho */}
+      {senhaError ? (
+        <Text style={{ color: "red", marginTop: -10, marginBottom: 10, fontSize: 14 }}>
+          {senhaError}
+        </Text>
+      ) : null}
 
       <Pressable onPress={handleSignup} style={[styles.primaryBtn, { marginTop: 20 }]}>
         <Text style={styles.primaryTxt}>Cadastrar</Text>
